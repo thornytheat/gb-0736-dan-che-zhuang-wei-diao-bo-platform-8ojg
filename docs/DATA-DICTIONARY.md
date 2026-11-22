@@ -15,6 +15,7 @@
 | 同上 | `note` | 可空，保留引号内换行 |
 | `sample_data/capacity.csv` | `station`、`revision`、`start`、`end`、`slots`、`note` | 容量修订的区间、桩数与备注。`0` 表示关站 |
 | `sample_data/plan.json` | `id`、`truck`、`from`、`to`、`depart`、`arrive`、`count` | 行程键、车辆、装卸地点与时点、装卸车辆数。行程时点支持毫秒 |
+| `sample_data/shift.json` | `next_shift` | 下一班窗口 `name/start/end` 与车辆接续表，车辆项含驻站 `station`、最早可用 `available_at`、载重和接收班组 `crew`。跨班交接依赖该字段 |
 
 CSV 上限为 256 KiB 和 2000 条逻辑记录。`line` 是记录起始的物理行号。`raw` 保存原始 CSV 字段，字段前后空白在归一列中清除。必填字段的空串、`-`、`N/A`、`NULL` 和 `未知` 单列原因码。同一事件号、站点、租还动作和发生时点相等时，保留收件最早的一行，同收件时点保留源行号最小的一行。一个事件号的有效候选出现业务矛盾时，全部隔离。
 
@@ -38,6 +39,19 @@ CSV 上限为 256 KiB 和 2000 条逻辑记录。`line` 是记录起始的物理
 | `POST /api/runs/restore` | JSON `expected`、`target` | 原子回切到归档版本 |
 
 `expected` 为写入时所见当前班次完整编号。查询七个阶段时可通过 `?run=<编号>` 固定证据版本。写入响应的 `created` 表示新增归档，`changed` 表示响应编号与所提交的 `expected` 不同。无效请求返回 `code`、`message`、`details`。
+
+## 跨班交接
+
+| 入口 | 请求字段 | 结果 |
+|---|---|---|
+| `POST /api/handover/preview` | JSON `run`、`cutoff`、`signoffs` | 不落库，返回交接执行单试算 |
+| `POST /api/handover/publish` | JSON `expected`、`cutoff`、`signoffs` | 事务内发布交接单并写入签收留档 |
+| `GET /api/handover` | 可选 `?handover=<编号>` | 查看生效或指定交接单与历史 |
+| `GET /api/handover/<id>/evidence.json` | 路径编号 | 下载含签收原文的证据包及 SHA-256 |
+
+`cutoff` 为交接时点，必须落在本班开始（不含）至下一班开始（含）之间。`signoffs` 每项字段为 `leg`（行程键）、`kind`（`accepted` 确认卸车 / `rejected` 拒收）、`count`（本张签收的辆数）、`at`（签收时点）、`text`（签收原文，必填）。同一行程、时点、原文、辆数重复上报标记 `duplicate=true`，已卸辆数只计一次；原文仍逐张写入 `handover_papers`，拒收与冲突结论均留痕。同行程出现互相矛盾的有效结论返回 `SIGNOFF_CONFLICT`，累计确认辆数超过行程装车数返回 `SIGNOFF_OVER_COUNT`。
+
+执行单关键字段：`legs[].status` 取 `done/partial/arrived_pending/in_transit/pending`，`unloaded` 为去重后已卸、`remaining_on_truck` 为随车剩余；`receivers` 按下一班车辆给出接收班组与辆数；`opening` 为下一班期初各站库存，由“无调拨基准 + 实际装卸”迷你重放推导；`demand.carried` 保留未成交原事件号、原因码与站点缓解量；`options.original` 与 `options.rerouted` 分别是原路线续跑和按下一班缺车（未成交借车笔数）重排的下一班行程。`expires_at` 即旧行程失效时点，等于下一班开始时间。交接单编号由班次号、交接时点、执行结果与规范化签收单计算，同单重试幂等；发布失败或 `STALE_RUN` 不改动旧行程与旧库存。
 
 运行编号由原始文件的 SHA-256 与字节数、规范化方案和规则版本计算。相同输入重跑会比对已存结果，原生成时间、原耗时与证据文件保持一致。证据 SHA-256 针对 `evidence` 对象，编码为 UTF-8，键名排序、紧凑 JSON，中文直接写入。只有下载包外层另附证据摘要。
 

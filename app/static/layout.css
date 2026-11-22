@@ -32,7 +32,7 @@ h1 { font-size: clamp(28px, 3.3vw, 46px); letter-spacing: -.045em; }
 h2 { font-size: 16px; }
 .shift-label { color: var(--ink-2); display: grid; justify-items: end; text-align: right; gap: 2px; }
 .shift-label span { color: var(--ink-3); font-size: 11px; }
-.steps { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: var(--gap); }
+.steps { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: var(--gap); }
 .steps a { display: flex; justify-content: center; align-items: center; gap: 7px; padding: 10px 3px; color: var(--ink-2); position: relative; }
 .steps a + a { border-left: 1px solid var(--line); }
 .steps a span { width: 19px; height: 19px; border-radius: 50%; text-align: center; font: 11px/19px var(--mono); background: var(--panel-3); }
@@ -53,7 +53,7 @@ h2 { font-size: 16px; }
   .rail-nav { display: none; }
   .rail-base { margin: 0; padding: 0; border: 0; }
   .brand strong { display: inline; font-size: inherit; }
-  .steps { overflow-x: auto; grid-template-columns: repeat(7, minmax(76px, 1fr)); }
+  .steps { overflow-x: auto; grid-template-columns: repeat(8, minmax(76px, 1fr)); }
   .kpi { padding: 7px; }
   .shift-label { font-size: 11px; }
 }

@@ -1,11 +1,13 @@
 import {$, api, clock, date, notice, post, showError, time} from './view.js';
 import * as stages from './stages.js';
 import {fillDraft, newLeg, readDraft} from './dispatch.js';
+import {fillEditor, handover as renderHandover, readSignoffs} from './handover.js';
 
 const anchors = [...document.querySelectorAll('.rail-nav [data-nav]')];
 const keys = anchors.map(link => link.dataset.nav);
 let current, meta, data, extra, selected, revision = 0;
 let draftRun, previewResult, previewedLegs;
+let handoverDraft, handoverResult, payloadId;
 let busy = false;
 
 function runId() { return meta.manifest.id; }
@@ -35,6 +37,32 @@ function paint() {
     }
     stages.dispatch(previewResult || data, meta.shift, Boolean(previewResult));
     $('publish').disabled = !previewedLegs || runId() !== activeId() || busy;
+  } else if (current === 'handover') {
+    if (handoverDraft !== runId()) {
+      handoverDraft = runId();
+      handoverResult = null;
+      fillEditor(meta.sample_plan, meta.shift, invalidateHandover);
+      const cutoff = new Date(Date.parse(meta.shift.end) - 30 * 60000);
+      $('handover-cutoff').value = cutoff.toISOString().slice(0, 19);
+    }
+    if (handoverResult) renderHandover(handoverResult, meta.shift, true);
+    else if (data) renderHandover(data, meta.shift, false);
+    else {
+      for (const id of ['handover-summary', 'handover-legs', 'handover-opening',
+        'handover-options', 'handover-demand', 'handover-papers']) $(id).replaceChildren();
+      $('handover-state').textContent = '尚未生成交接单';
+      $('handover-expiry').textContent = '';
+    }
+    const evidence = $('handover-evidence');
+    const handoverId = handoverResult ? null : (data ? payloadId : null);
+    if (handoverId) {
+      evidence.href = `/api/handover/${encodeURIComponent(handoverId)}/evidence.json`;
+      evidence.removeAttribute('aria-disabled');
+    } else {
+      evidence.removeAttribute('href');
+      evidence.setAttribute('aria-disabled', 'true');
+    }
+    $('handover-publish').disabled = !handoverResult || runId() !== activeId() || busy;
   } else stages[current](data, meta.shift, extra);
 }
 
@@ -70,6 +98,7 @@ async function load(run = selected) {
     if (token !== revision) return;
     meta = runMeta;
     data = stage === 'runs' ? runMeta : payload.data;
+    payloadId = stage === 'handover' ? payload.id : null;
     extra = slots?.data;
     updateMeta();
     paint();
@@ -107,19 +136,25 @@ function invalidate() {
   paint();
 }
 
+function invalidateHandover() {
+  handoverResult = null;
+  notice();
+  paint();
+}
+
 window.addEventListener('hashchange', () => {
   if (location.hash !== '#main') { stages.clearSlot(); load(); }
 });
 for (const id of ['intake-filter', 'replay-mode', 'demand-mode', 'inventory-mode']) $(id).addEventListener('change', paint);
 $('clear-slot').addEventListener('click', () => { stages.clearSlot(); paint(); });
-$('refresh').addEventListener('click', () => { draftRun = null; stages.clearSlot(); load(null); });
+$('refresh').addEventListener('click', () => { draftRun = handoverDraft = null; stages.clearSlot(); load(null); });
 $('rerun').addEventListener('click', () => mutate(() => post('/api/runs/rerun', {expected: runId()}), async result => {
-  draftRun = null;
+  draftRun = handoverDraft = null;
   await load(null);
   notice(result.created ? '已归档新版本' : '重跑完成 · 沿用同一班次编号');
 }));
 $('restore').addEventListener('click', () => mutate(() => post('/api/runs/restore', {target: runId(), expected: activeId()}), async () => {
-  draftRun = null;
+  draftRun = handoverDraft = null;
   await load(null);
   notice('已切回所选班次');
 }));
@@ -129,6 +164,7 @@ $('upload-form').addEventListener('submit', event => {
   file.set('expected', runId());
   mutate(() => api('/api/intake', {method: 'POST', body: file}), async result => {
     $('upload-form').reset();
+    draftRun = handoverDraft = handoverResult = null;
     await load(null);
     notice(result.created ? '收件完成 · 已归档' : '文件已收件 · 班次编号保持');
   });
@@ -144,7 +180,7 @@ $('dispatch-form').addEventListener('submit', event => {
   });
 });
 $('publish').addEventListener('click', () => mutate(() => post('/api/dispatch/publish', {expected: runId(), legs: previewedLegs}), async () => {
-  draftRun = null;
+  draftRun = handoverDraft = handoverResult = null;
   await load(null);
   notice('方案已发布');
 }));
@@ -165,4 +201,33 @@ $('add-leg').addEventListener('click', () => {
   fillDraft([...legs, newLeg(legs, meta.shift)], meta.shift, invalidate);
   invalidate();
 });
+$('handover-add').addEventListener('click', () => {
+  if (!$('handover-form').reportValidity()) return;
+  const rows = readSignoffs();
+  fillEditor(meta.sample_plan, meta.shift, invalidateHandover,
+    [...rows, {leg: meta.sample_plan[0].id, kind: 'accepted', count: 1,
+      at: meta.sample_plan[0].arrive, text: ''}]);
+  invalidateHandover();
+});
+$('handover-form').addEventListener('input', invalidateHandover);
+$('handover-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const payload = {run: runId(), cutoff: apiCutoff(), signoffs: readSignoffs()};
+  mutate(() => post('/api/handover/preview', payload), result => {
+    handoverResult = result.handover;
+    notice('交接单已试算，可发布');
+  });
+});
+$('handover-publish').addEventListener('click', () => mutate(() => post('/api/handover/publish', {
+  expected: runId(), cutoff: apiCutoff(), signoffs: readSignoffs(),
+}), async result => {
+  handoverDraft = null;
+  handoverResult = null;
+  await load(null);
+  notice(result.created ? '交接单已发布 · 旧行程按下一班开始时点失效' : '同一交接单 · 沿用原编号');
+}));
+function apiCutoff() {
+  const value = $('handover-cutoff').value;
+  return value ? `${value.length === 16 ? value + ':00' : value}+08:00` : value;
+}
 load(null);

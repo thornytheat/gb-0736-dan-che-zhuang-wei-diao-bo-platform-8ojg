@@ -1,0 +1,26 @@
+<div class="stage" id="stage-handover" hidden>
+  <section class="panel">
+    <div class="panel__head"><h2>交接录入</h2><span class="subtle">签收原文逐张留档，重复上报不会重复计入已卸</span></div>
+    <form id="handover-form" class="panel__body">
+      <div class="inline-form">
+        <label for="handover-cutoff">交接时点</label>
+        <input id="handover-cutoff" name="cutoff" type="datetime-local" step="any" required>
+      </div>
+      <div class="ledger-scroll" id="handover-editor"></div>
+      <div class="panel__body actions form-actions">
+        <button class="btn" id="handover-add" type="button">新增签收</button>
+        <button class="btn" type="submit">生成交接单</button>
+        <button class="btn btn--primary" id="handover-publish" type="button" disabled>发布交接单</button>
+      </div>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="panel__head"><h2>跨班交接执行单</h2><span class="actions"><a class="btn" id="handover-evidence" aria-disabled="true">下载交接证据</a><span class="subtle" id="handover-state">尚未试算</span></span></div>
+    <div id="handover-summary" class="panel__body diff-grid"></div>
+  </section>
+  <section class="panel"><div class="panel__head"><h2>已执行行程与剩余车辆</h2><span class="subtle" id="handover-expiry"></span></div><div class="ledger-scroll" id="handover-legs"></div></section>
+  <section class="panel"><div class="panel__head"><h2>下一班期初库存与接收人</h2></div><div class="ledger-scroll" id="handover-opening"></div></section>
+  <section class="panel"><div class="panel__head"><h2>续跑方案</h2><span class="subtle">原路线 vs 按下一班缺车重排</span></div><div class="ledger-scroll" id="handover-options"></div></section>
+  <section class="panel"><div class="panel__head"><h2>未成交结转</h2></div><div class="ledger-scroll" id="handover-demand"></div></section>
+  <section class="panel"><div class="panel__head"><h2>签收留档</h2><span class="subtle">含重复上报原件</span></div><div class="ledger-scroll" id="handover-papers"></div></section>
+</div>
